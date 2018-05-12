@@ -35,6 +35,8 @@ struct nsproxy {
 	struct pid_namespace *pid_ns_for_children;
 	struct net 	     *net_ns;
 	struct cgroup_namespace *cgroup_ns;
+	// SYQ
+	struct apparmor_namespace *apparmor_ns;
 };
 extern struct nsproxy init_nsproxy;
 

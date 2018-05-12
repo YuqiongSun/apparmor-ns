@@ -28,6 +28,8 @@
 #define CLONE_NEWPID		0x20000000	/* New pid namespace */
 #define CLONE_NEWNET		0x40000000	/* New network namespace */
 #define CLONE_IO		0x80000000	/* Clone io context */
+// SYQ
+#define CLONE_NEWAPPARMOR	0x00001000	/* New AppArmor namespace */
 
 /*
  * Scheduling policies

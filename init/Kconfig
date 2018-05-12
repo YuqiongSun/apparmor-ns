@@ -945,6 +945,13 @@ config NET_NS
 	  Allow user space to create what appear to be multiple instances
 	  of the network stack.
 
+config APPARMOR_NS
+	bool "AppArmor namespace"
+	depends on SECURITY_APPARMOR 
+	default y
+	help
+	  Allow each namespace to independently enforce AppArmor policy
+
 endif # NAMESPACES
 
 config SCHED_AUTOGROUP
