@@ -3,6 +3,7 @@
 #include <linux/proc_ns.h>
 #include <linux/apparmor_namespace.h>
 
+
 struct apparmor_namespace init_apparmor_ns = {
 	.kref = KREF_INIT(2),
 	.user_ns = &init_user_ns,
@@ -11,5 +12,6 @@ struct apparmor_namespace init_apparmor_ns = {
 	.ns.ops = &apparmorns_operations,
 #endif
 	.parent = NULL,
+	.root_ns = NULL,
 };
 EXPORT_SYMBOL(init_apparmor_ns);

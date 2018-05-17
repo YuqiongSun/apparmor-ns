@@ -7,16 +7,24 @@
 #include <linux/rculist.h>
 #include <linux/sched.h>
 
+#define APPARMOR_ROOT_NS_NAME_SIZE 14
+
+extern struct aa_ns;
+
 struct apparmor_namespace {
 	struct kref kref;
 	struct user_namespace *user_ns;
 	struct ns_common ns;
 	struct apparmor_namespace *parent;
+	unsigned char root_ns_name[APPARMOR_ROOT_NS_NAME_SIZE];
+	struct aa_ns *root_ns;
 };
 
 extern struct apparmor_namespace init_apparmor_ns;
 
+
 #ifdef CONFIG_APPARMOR_NS
+
 void free_apparmor_ns(struct kref *kref);
 
 static inline void get_apparmor_ns(struct apparmor_namespace *ns)

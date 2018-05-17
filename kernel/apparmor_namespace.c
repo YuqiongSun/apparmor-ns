@@ -7,6 +7,11 @@
 #include <linux/sched/task.h>
 #include <linux/capability.h>
 #include <linux/cred.h>
+#include <linux/random.h>
+
+//extern struct aa_ns *aa_alloc_namespace_root_ns(const char *name);
+extern void destroy_namespace_root_ns(struct aa_ns *ns);
+extern struct aa_ns *aa_prepare_ns(struct aa_ns *parent, const char *name);
 
 static struct apparmor_namespace *create_apparmor_ns(void)
 {
@@ -24,6 +29,7 @@ static struct apparmor_namespace *clone_apparmor_ns(struct user_namespace *user_
 {
 	struct apparmor_namespace *ns;
 	int err;
+	int random;
 
 	ns = create_apparmor_ns();
 	if (!ns)
@@ -39,6 +45,17 @@ static struct apparmor_namespace *clone_apparmor_ns(struct user_namespace *user_
 	get_apparmor_ns(old_ns);
 	ns->parent = old_ns;
 	ns->user_ns = get_user_ns(user_ns);
+
+	get_random_bytes(&random, sizeof(random));
+	memset(ns->root_ns_name, '\0', APPARMOR_ROOT_NS_NAME_SIZE);	
+	sprintf(ns->root_ns_name, "%s_%08x", "root",random);
+
+	ns->root_ns = aa_prepare_ns(ns->parent->root_ns, ns->root_ns_name);
+	if (ns->root_ns < 0) {
+		kfree(ns);
+		printk("SYQ: error allocating aa_ns for namespace\n");
+		return ERR_PTR(ns->root_ns);
+	}
 
 	return ns;
 }
@@ -65,6 +82,7 @@ static void destroy_apparmor_ns(struct apparmor_namespace *ns)
 {
 	put_user_ns(ns->user_ns);
 	ns_free_inum(&ns->ns);
+	destroy_namespace_root_ns(ns->root_ns);
 	kfree(ns);
 }
 

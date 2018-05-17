@@ -26,10 +26,13 @@
 #include "include/label.h"
 #include "include/policy.h"
 
+#include <linux/apparmor_namespace.h>
+
 /* root profile namespace */
 struct aa_ns *root_ns;
 const char *aa_hidden_ns_name = "---";
 
+//extern struct apparmor_namespace init_apparmor_ns;
 /**
  * aa_ns_visible - test if @view is visible from @curr
  * @curr: namespace to treat as the parent (NOT NULL)
@@ -313,9 +316,15 @@ struct aa_ns *aa_prepare_ns(struct aa_ns *parent, const char *name)
 {
 	struct aa_ns *ns;
 
+	if (!parent)
+	{
+		printk("SYQ: aa_prepare_ns() parent is null\n");
+	}
+
 	mutex_lock(&parent->lock);
 	/* try and find the specified ns and if it doesn't exist create it */
 	/* released by caller */
+	printk("SYQ: creating AppArmor namespace %s\n", name);
 	ns = aa_get_ns(__aa_find_ns(&parent->sub_ns, name));
 	if (!ns)
 		ns = __aa_create_ns(parent, name, NULL);
@@ -384,6 +393,20 @@ static void __ns_list_release(struct list_head *head)
 
 }
 
+// SYQ
+struct aa_ns *aa_alloc_namespace_root_ns(const char *name)
+{
+	struct aa_ns *namespace_root_ns = alloc_ns(NULL, name);
+	if (!namespace_root_ns)
+		return -ENOMEM;
+	return namespace_root_ns;
+}
+
+void destroy_namespace_root_ns(struct aa_ns *ns)
+{
+	destroy_ns(ns);
+}
+
 /**
  * aa_alloc_root_ns - allocate the root profile namespace
  *
@@ -396,7 +419,8 @@ int __init aa_alloc_root_ns(void)
 	root_ns = alloc_ns(NULL, "root");
 	if (!root_ns)
 		return -ENOMEM;
-
+	// SYQ: set root ns for the root apparmor namespace
+	init_apparmor_ns.root_ns = root_ns;
 	return 0;
 }
 
