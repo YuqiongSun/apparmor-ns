@@ -1931,6 +1931,41 @@ fail:
 }
 
 
+// SYQ: create a new label for AppArmor namespace
+struct aa_label *aa_label_new_namespace(struct aa_label *base, gfp_t gfp, struct aa_profile *new_profile)
+{
+	DEFINE_VEC(profile, vec);
+	struct aa_label *label, *currbase = base;
+	int i = 0, error;
+	int len;
+
+	AA_BUG(!base);
+
+	len = base->size + 1;
+	error = vec_setup(profile, vec, len, gfp);
+	if (error)
+		return ERR_PTR(error);
+
+	for (i = 0; i < base->size; i++)
+		vec[i] = aa_get_profile(base->vec[i]);
+
+	// profile for the new namespace is always unconfined
+	// TODO: can I directly set this? or is there some ref counter to update 
+	vec[len - 1] = new_profile;
+
+	label = aa_vec_find_or_create_label(vec, len, gfp);
+
+	if (!label)
+		goto fail;
+
+out:
+	vec_cleanup(profile, vec, len);
+	return label;
+fail:
+	label = ERR_PTR(-ENOENT);
+	goto out;
+}
+
 /**
  * aa_labelset_destroy - remove all labels from the label set
  * @ls: label set to cleanup (NOT NULL)

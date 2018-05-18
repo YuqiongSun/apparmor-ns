@@ -736,6 +736,32 @@ static struct aa_label *handle_onexec(struct aa_label *label,
 	return ERR_PTR(error);
 }
 
+// SYQ: set label for new namespace on clone
+int apparmor_prepare_label(struct cred *cred, struct aa_ns *ns)
+{
+	struct aa_task_ctx *ctx;
+	struct aa_label *label, *new = NULL;
+
+	ctx = cred_ctx(cred);
+	AA_BUG(!ctx);
+
+	label = aa_get_newest_label(ctx->label);
+	aa_put_label(ctx->label);
+
+	new = aa_label_new_namespace(label, GFP_ATOMIC, ns->unconfined); 
+		
+	if (!new) {
+		printk("SYQ: aa_label_new_namespace() the label was not created\n");
+		goto out;
+	}
+
+	ctx->label = new;
+out:
+	aa_put_label(label);
+	return 0;
+}
+
+
 /**
  * apparmor_bprm_set_creds - set the new creds on the bprm struct
  * @bprm: binprm for the exec  (NOT NULL)

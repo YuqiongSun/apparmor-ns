@@ -12,6 +12,7 @@
 //extern struct aa_ns *aa_alloc_namespace_root_ns(const char *name);
 extern void destroy_namespace_root_ns(struct aa_ns *ns);
 extern struct aa_ns *aa_prepare_ns(struct aa_ns *parent, const char *name);
+extern int apparmor_prepare_label(struct cred *cred, struct aa_ns *ns);
 
 static struct apparmor_namespace *create_apparmor_ns(void)
 {
@@ -25,11 +26,13 @@ static struct apparmor_namespace *create_apparmor_ns(void)
 }
 
 static struct apparmor_namespace *clone_apparmor_ns(struct user_namespace *user_ns,
-					  struct apparmor_namespace *old_ns)
+					  struct apparmor_namespace *old_ns,
+					  struct task_struct *tsk)
 {
 	struct apparmor_namespace *ns;
 	int err;
 	int random;
+	struct cred *cred;	
 
 	ns = create_apparmor_ns();
 	if (!ns)
@@ -57,12 +60,17 @@ static struct apparmor_namespace *clone_apparmor_ns(struct user_namespace *user_
 		return ERR_PTR(ns->root_ns);
 	}
 
+	cred = get_task_cred(tsk);
+	// Reset labels for the new cred
+	apparmor_prepare_label(cred, ns->root_ns);
+
 	return ns;
 }
 
 struct apparmor_namespace *copy_apparmor(unsigned long flags,
 			       struct user_namespace *user_ns,
-			       struct apparmor_namespace *old_ns)
+			       struct apparmor_namespace *old_ns, 
+			       struct task_struct *tsk)
 {
 	struct apparmor_namespace *new_ns;
 
@@ -72,7 +80,7 @@ struct apparmor_namespace *copy_apparmor(unsigned long flags,
 	if (!(flags & CLONE_NEWAPPARMOR))
 		return old_ns;
 
-	new_ns = clone_apparmor_ns(user_ns, old_ns);
+	new_ns = clone_apparmor_ns(user_ns, old_ns, tsk);
 	put_apparmor_ns(old_ns);
 
 	return new_ns;

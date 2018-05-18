@@ -118,7 +118,7 @@ static struct nsproxy *create_new_namespaces(unsigned long flags,
 
 	// SYQ
 	new_nsp->apparmor_ns = copy_apparmor(flags, user_ns,
-						tsk->nsproxy->apparmor_ns);
+						tsk->nsproxy->apparmor_ns, tsk);
 	if (IS_ERR(new_nsp->apparmor_ns)) {
 		err = PTR_ERR(new_nsp->apparmor_ns);
 		goto out_apparmor;

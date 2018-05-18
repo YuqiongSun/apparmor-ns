@@ -39,7 +39,8 @@ static inline void put_apparmor_ns(struct apparmor_namespace *ns)
 
 struct apparmor_namespace *copy_apparmor(unsigned long flags,
 			       struct user_namespace *user_ns,
-			       struct apparmor_namespace *old_ns);
+			       struct apparmor_namespace *old_ns,
+			       struct task_struct *tsk);
 
 #else
 static inline void get_apparmor_ns(struct apparmor_namespace *ns)
@@ -52,7 +53,8 @@ static inline void put_apparmor_ns(struct apparmor_namespace *ns)
 
 static inline struct apparmor_namespace *copy_apparmor(unsigned long flags,
 					     struct user_namespace *user_ns,
-					     struct apparmor_namespace *old_ns)
+					     struct apparmor_namespace *old_ns,
+					     struct task_struct *tsk)
 {
 	if (flags & CLONE_NEWAPPARMOR)
 		return ERR_PTR(-EINVAL);

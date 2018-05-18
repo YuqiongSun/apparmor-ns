@@ -330,6 +330,9 @@ void aa_label_printk(struct aa_label *label, gfp_t gfp);
 struct aa_label *aa_label_parse(struct aa_label *base, const char *str,
 				gfp_t gfp, bool create, bool force_stack);
 
+// SYQ
+struct aa_label *aa_label_new_namespace(struct aa_label *base, gfp_t gfp, 
+					struct aa_profile *new_profile);
 
 struct aa_perms;
 int aa_label_match(struct aa_profile *profile, struct aa_label *label,

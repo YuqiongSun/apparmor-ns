@@ -1195,8 +1195,9 @@ static int seq_ns_name_show(struct seq_file *seq, void *v)
 					   labels_ns(label), true));
 	*/
 	// SYQ: shows namespace name, but only the current
+	// hname shows nested namespace names root//root_db8fa634
 	// TODO: view check
-	seq_printf(seq, "%s|%s\n", labels_ns(label)->base.name, labels_ns(label)->base.hname);
+	seq_printf(seq, "%s\n", labels_ns(label)->base.hname);
 	end_current_label_crit_section(label);
 
 	return 0;
