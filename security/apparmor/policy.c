@@ -92,6 +92,10 @@
 #include "include/policy_unpack.h"
 #include "include/resource.h"
 
+
+// SYQ
+#include <linux/apparmor_namespace.h>
+
 int unprivileged_userns_apparmor_policy = 1;
 
 const char *const aa_profile_mode_names[] = {
@@ -920,6 +924,28 @@ ssize_t aa_replace_profiles(struct aa_ns *policy_ns, struct aa_label *label,
 			}
 		}
 	}
+
+
+	/* SYQ: check for profile conflicts before replacing or loading */
+	list_for_each_entry(ent, &lh, list) {
+		struct aa_ns *cur = ns;
+		struct aa_profile *existing;
+		int conflicts = 0;
+		while (cur != init_apparmor_ns.root_ns) {
+			cur = cur->parent;
+			existing = aa_get_profile(__lookup_profile(&cur->base, ent->new->base.hname));
+			if (!existing) {
+				continue;
+			}
+			printk("SYQ: checking conflicts with ns:%s, profile:%s\n", &cur->base.name, existing->base.hname);
+			conflicts = aa_detect_conflicts(ent->new, existing);
+			if (conflicts) {
+				printk("SYQ: conflicts detected for %s\n", ent->new->base.hname);
+			}
+			aa_put_profile(existing);
+		}
+	}
+
 	/* setup parent and ns info */
 	list_for_each_entry(ent, &lh, list) {
 		struct aa_policy *policy;

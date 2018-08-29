@@ -62,6 +62,9 @@ static void file_audit_cb(struct audit_buffer *ab, void *va)
 	struct common_audit_data *sa = va;
 	kuid_t fsuid = current_fsuid();
 
+	// SYQ
+	dump_stack();
+
 	if (aad(sa)->request & AA_AUDIT_FILE_MASK) {
 		audit_log_format(ab, " requested_mask=");
 		audit_file_mask(ab, aad(sa)->request);
@@ -263,6 +266,46 @@ struct aa_perms aa_compute_fperms(struct aa_dfa *dfa, unsigned int state,
 	return perms;
 }
 
+// SYQ
+// Added due to we need to check perms under different cond
+// TODO: hacky.... Let's change it
+struct aa_perms aa_compute_fperms_simple(struct aa_dfa *dfa, unsigned int state, int equal)
+{
+	struct aa_perms perms;
+
+	/* FIXME: change over to new dfa format
+	 * currently file perms are encoded in the dfa, new format
+	 * splits the permissions from the dfa.  This mapping can be
+	 * done at profile load
+	 */
+	perms.deny = 0;
+	perms.kill = perms.stop = 0;
+	perms.complain = perms.cond = 0;
+	perms.hide = 0;
+	perms.prompt = 0;
+
+	if (equal) {
+		perms.allow = map_old_perms(dfa_user_allow(dfa, state));
+		perms.audit = map_old_perms(dfa_user_audit(dfa, state));
+		perms.quiet = map_old_perms(dfa_user_quiet(dfa, state));
+		perms.xindex = dfa_user_xindex(dfa, state);
+	} else {
+		perms.allow = map_old_perms(dfa_other_allow(dfa, state));
+		perms.audit = map_old_perms(dfa_other_audit(dfa, state));
+		perms.quiet = map_old_perms(dfa_other_quiet(dfa, state));
+		perms.xindex = dfa_other_xindex(dfa, state);
+	}
+	perms.allow |= AA_MAY_GETATTR;
+
+	/* change_profile wasn't determined by ownership in old mapping */
+	if (ACCEPT_TABLE(dfa)[state] & 0x80000000)
+		perms.allow |= AA_MAY_CHANGE_PROFILE;
+	if (ACCEPT_TABLE(dfa)[state] & 0x40000000)
+		perms.allow |= AA_MAY_ONEXEC;
+
+	return perms;
+}
+
 /**
  * aa_str_perms - find permission that match @name
  * @dfa: to match against  (MAYBE NULL)
@@ -290,10 +333,29 @@ int __aa_path_perm(const char *op, struct aa_profile *profile, const char *name,
 {
 	int e = 0;
 
+	// SYQ
+	struct aa_perms testperms;
+	//char testnames[] = "/root/test/tempdir/syqdir/*";
+	char testnames[] = "/root/test/tempdir/*/test";
+
 	if (profile_unconfined(profile) ||
 	    ((flags & PATH_SOCK_COND) && !PROFILE_MEDIATES_AF(profile, AF_UNIX)))
 		return 0;
 	aa_str_perms(profile->file.dfa, profile->file.start, name, cond, perms);
+
+
+	// SYQ
+	/*
+	if (strstr(name, "syq") || strstr(name, "SYQ")) {
+		//printk("SYQ| name is: %s\n", name);
+		// Only when pathname of target contains syq, execute this
+		aa_str_perms(profile->file.dfa, profile->file.start, testnames, cond, &testperms);
+		printk("SYQ| original perms allow : %d, deny %d\n", perms->allow, perms->deny);
+		printk("SYQ| * perms allow : %d, deny %d\n", testperms.allow, testperms.deny);
+	}
+	*/
+
+
 	if (request & ~perms->allow)
 		e = -EACCES;
 	return aa_audit_file(profile, perms, op, request, name, NULL, NULL,

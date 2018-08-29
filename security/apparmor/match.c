@@ -387,11 +387,19 @@ unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
 	u16 *check = CHECK_TABLE(dfa);
 	unsigned int state = start, pos;
 
+	// SYQ
+	int debug = 0;
+	if (strstr(str, "syq") || strstr(str, "SYQ")) {
+		// no debug
+		debug = 0;
+	}	
+
 	if (state == 0)
 		return 0;
 
 	/* current state is <state>, matching character *str */
 	if (dfa->tables[YYTD_ID_EC]) {
+		/* default is direct to next state */
 		/* Equivalence class table defined */
 		u8 *equiv = EQUIV_TABLE(dfa);
 		/* default is direct to next state */
@@ -405,11 +413,22 @@ unsigned int aa_dfa_match(struct aa_dfa *dfa, unsigned int start,
 	} else {
 		/* default is direct to next state */
 		while (*str) {
+			// SYQ
+			char input = (char)*str;
+			unsigned int old_state = state;
+
 			pos = base_idx(base[state]) + (u8) *str++;
-			if (check[pos] == state)
+			if (check[pos] == state) {
 				state = next[pos];
-			else
+				if (debug) {
+					printk("SYQ next| %c: %u,  %u -> %u\n", input, pos, old_state, state);
+				}
+			} else {
 				state = def[state];
+				if (debug) {
+					printk("SYQ def| %c: %u,  %u -> %u\n", input, pos, old_state, state);
+				}
+			}
 		}
 	}
 

@@ -29,6 +29,7 @@
 #include "include/path.h"
 #include "include/policy.h"
 #include "include/policy_unpack.h"
+#include "include/graph.h"
 
 #define K_ABI_MASK 0x3ff
 #define FORCE_COMPLAIN_FLAG 0x800
@@ -586,6 +587,8 @@ static int datacmp(struct rhashtable_compare_arg *arg, const void *obj)
 	return strcmp(data->key, *key);
 }
 
+void print_rules(struct aa_profile *profile, unsigned int start, unsigned int end);
+
 /**
  * unpack_profile - unpack a serialized profile
  * @e: serialized data extent information (NOT NULL)
@@ -861,6 +864,43 @@ static struct aa_profile *unpack_profile(struct aa_ext *e, char **ns_name)
 		goto fail;
 	}
 
+	// SYQ
+	if (strstr(profile->base.name, "syq") || strstr(profile->base.name, "SYQ")) {
+		struct aa_dfa *dfasyq = profile->file.dfa;
+		u16 *def = DEFAULT_TABLE(dfasyq);
+		u32 *base = BASE_TABLE(dfasyq);
+		u16 *next = NEXT_TABLE(dfasyq);
+		u16 *check = CHECK_TABLE(dfasyq);
+		int i = 0;
+		struct aa_perms perms_e = {};
+		struct aa_perms perms_n = {};
+	
+		printk("SYQ| def table size %d, %d\n", profile->file.dfa->tables[YYTD_ID_DEF]->td_lolen, profile->file.dfa->tables[YYTD_ID_DEF]->td_hilen);
+		printk("SYQ| base table size %d, %d\n", profile->file.dfa->tables[YYTD_ID_BASE]->td_lolen, profile->file.dfa->tables[YYTD_ID_BASE]->td_hilen);
+		printk("SYQ| next table size %d, %d\n", profile->file.dfa->tables[YYTD_ID_NXT]->td_lolen, profile->file.dfa->tables[YYTD_ID_NXT]->td_hilen);
+		printk("SYQ| check table size %d, %d\n", profile->file.dfa->tables[YYTD_ID_CHK]->td_lolen, profile->file.dfa->tables[YYTD_ID_CHK]->td_hilen);
+		printk("SYQ| accept table size %d, %d\n", profile->file.dfa->tables[YYTD_ID_ACCEPT]->td_lolen, profile->file.dfa->tables[YYTD_ID_ACCEPT]->td_hilen);
+
+		printk("SYQ| index: \t(default,\t base)\n");
+		for (i = 0; i < profile->file.dfa->tables[YYTD_ID_DEF]->td_lolen; i++) {
+			printk("SYQ| %d \t\t(%u\t, %u)\n", i, *(def + i), *(base + i));
+		}
+		for (i = 0; i < profile->file.dfa->tables[YYTD_ID_DEF]->td_lolen; i++) {
+			perms_e = aa_compute_fperms_simple(dfasyq, i, 1);
+			perms_n = aa_compute_fperms_simple(dfasyq, i, 0);
+			printk("SYQ| e_allow: %d, n_allow:%d", perms_e.allow, perms_n.allow);
+		}
+		printk("SYQ| index: \t(next,\t check)\n");
+		for (i = 0; i < profile->file.dfa->tables[YYTD_ID_NXT]->td_lolen; i++) {
+			if (*(check + i) == 0)
+				printk("SYQ| %d(%d + %c) \t\t(%u\t, %u)(unused?)\n", i, *(base + *(check + i)), (char)(i - *(base + *(check + i))), *(next + i), *(check + i));
+			else
+				printk("SYQ| %d(%d + %c) \t\t(%u\t, %u)\n", i, *(base + *(check + i)), (char)(i - *(base + *(check + i))), *(next + i), *(check + i));
+		}
+		print_rules(profile, 0 , 0);
+		
+	}
+
 	return profile;
 
 fail:
@@ -872,6 +912,96 @@ fail:
 	aa_free_profile(profile);
 
 	return ERR_PTR(error);
+}
+
+
+void print_rules(struct aa_profile *profile, unsigned int start, unsigned int end) {
+	struct aa_dfa *dfasyq = profile->file.dfa;
+	u16 *def = DEFAULT_TABLE(dfasyq);
+	u32 *base = BASE_TABLE(dfasyq);
+	u16 *next = NEXT_TABLE(dfasyq);
+	u16 *check = CHECK_TABLE(dfasyq);
+	int total_def = dfasyq->tables[YYTD_ID_ACCEPT]->td_lolen;
+	int total_chk = dfasyq->tables[YYTD_ID_CHK]->td_lolen;
+	int i, state;
+	Graph g = graph_create(total_def);
+	Tran tr = tran_create(total_def);
+
+	for (i = 0; i < total_chk; i++) {
+		if (check[i] == 0 || next[i] == 0) continue;
+		graph_add_edge(g, tr, check[i], next[i], (char)(i - base[check[i]]));
+	}
+	for (i = 0; i < total_def; i++) {
+		if (def[i] == 0) continue;
+		graph_add_edge(g, tr, i, def[i], '*');
+	}
+	//for (i = 2; i < total_def; i++)
+	//	print_path(g, tr, 1, i);
+	print_all_path(g, tr, 1);
+	graph_destroy(g, tr);
+}
+
+int check_one_state(char *path, struct aa_profile *new, struct aa_profile *existing) {
+	struct aa_perms perms_e = {};
+	struct aa_perms perms_n = {};
+	struct aa_perms perms_p_e = {};
+	struct aa_perms perms_p_n = {};
+	int state;
+	int p_state;
+	
+	printk("SYQ| Checking path %s", path);
+
+	p_state = aa_dfa_match(existing->file.dfa, existing->file.start, path);
+	state = aa_dfa_match(new->file.dfa, new->file.start, path);
+	perms_e = aa_compute_fperms_simple(new->file.dfa, state, 1);
+	perms_n = aa_compute_fperms_simple(new->file.dfa, state, 0);
+	perms_p_e = aa_compute_fperms_simple(existing->file.dfa, p_state, 1);
+	perms_p_n = aa_compute_fperms_simple(existing->file.dfa, p_state, 0);
+	if ((perms_e.allow & perms_p_e.allow) != perms_e.allow || (perms_n.allow & perms_p_n.allow) != perms_n.allow) {
+		printk("SYQ| Conflicts detected at %s", path);
+	}
+	printk("SYQ| existing_e.allow = %d, new_e.allow = %d, existing_n.allow = %d, new_n.allow = %d", perms_p_e.allow, perms_e.allow, perms_p_n.allow, perms_n.allow);
+	return 0;
+}
+
+/**
+ * aa_detect_conflicts - detect conflicts between two profiles (just for file access)
+ * @new : newly loaded profile
+ * @existing : existing profile
+*/
+int aa_detect_conflicts(struct aa_profile *new, struct aa_profile *existing) {
+	struct aa_dfa *dfasyq = new->file.dfa;
+	u16 *def = DEFAULT_TABLE(dfasyq);
+        u32 *base = BASE_TABLE(dfasyq);
+        u16 *next = NEXT_TABLE(dfasyq);
+        u16 *check = CHECK_TABLE(dfasyq);
+        int total_def = dfasyq->tables[YYTD_ID_ACCEPT]->td_lolen;
+        int total_chk = dfasyq->tables[YYTD_ID_CHK]->td_lolen;
+        int i, state;
+        Graph g = graph_create(total_def);
+        Tran tr = tran_create(total_def);
+	int error = 0;
+	int ret = 0;
+
+        for (i = 0; i < total_chk; i++) {
+                if (check[i] == 0 || next[i] == 0) continue;
+                graph_add_edge(g, tr, check[i], next[i], (char)(i - base[check[i]]));
+        }
+        for (i = 0; i < total_def; i++) {
+                if (def[i] == 0) continue;
+                graph_add_edge(g, tr, i, def[i], '*');
+        }
+	printk("SYQ: Total amount of states is %d\n", total_def);
+
+	//check_one_state("/proc/11/attr/current", new, existing);
+	
+	error = check_state_match(g, tr, new, existing);
+	if (!error)
+		printk("SYQ: no conflicts detected");
+	//print_all_path(g, tr, 1);
+	
+	graph_destroy(g, tr);
+	return ret;
 }
 
 /**
