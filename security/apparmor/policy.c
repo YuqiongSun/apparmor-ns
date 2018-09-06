@@ -929,12 +929,27 @@ ssize_t aa_replace_profiles(struct aa_ns *policy_ns, struct aa_label *label,
 	/* SYQ: check for profile conflicts before replacing or loading */
 	list_for_each_entry(ent, &lh, list) {
 		struct aa_ns *cur = ns;
-		struct aa_profile *existing;
+		struct aa_profile *existing, *temp;
 		int conflicts = 0;
+		int i = 0;
 		while (cur != init_apparmor_ns.root_ns) {
 			cur = cur->parent;
 			existing = aa_get_profile(__lookup_profile(&cur->base, ent->new->base.hname));
 			if (!existing) {
+				// Assume ancestor does not have specific transition rules
+				// Check against profiles inherited from ancestor
+				for (i = 0; i < label->size; i++) {
+					temp = label->vec[i];
+					aa_get_profile(temp);
+					if (temp->ns == cur && temp->mode != APPARMOR_UNCONFINED) {
+						conflicts = aa_detect_conflicts(ent->new, temp);
+						if (conflicts) {
+							printk("SYQ: checking conflicts with ns:%s, profile:%s\n", &cur->base.name, temp->base.hname);
+							printk("SYQ: conflicts detected for %s\n", ent->new->base.hname);
+						}
+					}
+					aa_put_profile(temp);
+				}
 				continue;
 			}
 			printk("SYQ: checking conflicts with ns:%s, profile:%s\n", &cur->base.name, existing->base.hname);

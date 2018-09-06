@@ -63,7 +63,7 @@ static void file_audit_cb(struct audit_buffer *ab, void *va)
 	kuid_t fsuid = current_fsuid();
 
 	// SYQ
-	dump_stack();
+	//dump_stack();
 
 	if (aad(sa)->request & AA_AUDIT_FILE_MASK) {
 		audit_log_format(ab, " requested_mask=");
