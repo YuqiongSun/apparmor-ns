@@ -327,10 +327,6 @@ unsigned int aa_str_perms(struct aa_dfa *dfa, unsigned int start,
 	state = aa_dfa_match(dfa, start, name);
 	*perms = aa_compute_fperms(dfa, state, cond);
 	
-	// SYQ
-	if (strstr(name, "/root/test/temp")) {
-		printk("SYQ| I am called");
-	}
 	
 	return state;
 }
@@ -392,8 +388,7 @@ int __aa_path_perm(const char *op, struct aa_profile *profile, const char *name,
 		printk("SYQ| * perms allow : %d, deny %d\n", testperms.allow, testperms.deny);
 	}
 	*/
-
-
+	
 	if (request & ~perms->allow)
 		e = -EACCES;
 	return aa_audit_file(profile, perms, op, request, name, NULL, NULL,
@@ -463,7 +458,6 @@ int aa_path_perm(const char *op, struct aa_label *label,
 	char *buffer = NULL;
 	int error_local, error_global;
 	struct aa_ns *ns;
-
 
 
 	flags |= PATH_DELEGATE_DELETED | (S_ISDIR(cond->mode) ? PATH_IS_DIR :

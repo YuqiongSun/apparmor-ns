@@ -47,6 +47,8 @@ int apparmor_initialized;
 
 DEFINE_PER_CPU(struct aa_buffers, aa_buffers);
 
+// SYQ
+extern struct aa_global_policy global_policy;
 
 /*
  * LSM hook functions
@@ -412,8 +414,9 @@ static int apparmor_file_open(struct file *file, const struct cred *cred)
 
 	label = aa_get_newest_cred_label(cred);
 
-
-	if (!unconfined(label)) {
+	// SYQ
+	// check against global list even if unconfined
+	if (!unconfined(label) || global_policy.size != 0) {
 		struct inode *inode = file_inode(file);
 		struct path_cond cond = { inode->i_uid, inode->i_mode };
 
