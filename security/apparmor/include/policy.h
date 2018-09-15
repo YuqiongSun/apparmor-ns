@@ -158,6 +158,8 @@ struct aa_profile {
 	char *dirname;
 	struct dentry *dents[AAFS_PROF_SIZEOF];
 	struct rhashtable *data;
+	// SYQ
+	struct list_head global_profiles;	/* Only put a profile on global list if it defines global policy */
 	struct aa_label label;
 };
 

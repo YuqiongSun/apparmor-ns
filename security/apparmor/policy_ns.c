@@ -404,7 +404,9 @@ struct aa_ns *aa_alloc_namespace_root_ns(const char *name)
 
 void destroy_namespace_root_ns(struct aa_ns *ns)
 {
-	destroy_ns(ns);
+	mutex_lock(&ns->parent->lock);
+	__aa_remove_ns(ns);
+	mutex_unlock(&ns->parent->lock);
 }
 
 /**

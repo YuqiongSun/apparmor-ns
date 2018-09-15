@@ -143,6 +143,11 @@ struct aa_policy {
 	struct list_head profiles;
 };
 
+struct aa_global_policy {
+	struct list_head globals;
+	int size;
+};
+
 /**
  * basename - find the last component of an hname
  * @name: hname to find the base profile name component of  (NOT NULL)

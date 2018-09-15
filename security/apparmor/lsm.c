@@ -396,6 +396,7 @@ static int apparmor_file_open(struct file *file, const struct cred *cred)
 	struct aa_label *label;
 	int error = 0;
 
+
 	if (!path_mediated_fs(file->f_path.dentry))
 		return 0;
 
@@ -410,6 +411,8 @@ static int apparmor_file_open(struct file *file, const struct cred *cred)
 	}
 
 	label = aa_get_newest_cred_label(cred);
+
+
 	if (!unconfined(label)) {
 		struct inode *inode = file_inode(file);
 		struct path_cond cond = { inode->i_uid, inode->i_mode };

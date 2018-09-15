@@ -94,6 +94,8 @@ static void destroy_apparmor_ns(struct apparmor_namespace *ns)
 	kfree(ns);
 }
 
+// This seems to be wrong
+/*
 void free_apparmor_ns(struct kref *kref)
 {
 	struct apparmor_namespace *ns;
@@ -107,6 +109,18 @@ void free_apparmor_ns(struct kref *kref)
 		put_apparmor_ns(parent);
 		ns = parent;
 	}
+}
+*/
+
+void free_apparmor_ns(struct kref *kref)
+{
+	struct apparmor_namespace *ns;
+	struct apparmor_namespace *parent;
+
+	ns = container_of(kref, struct apparmor_namespace, kref);
+	parent = ns->parent;
+	destroy_apparmor_ns(ns);
+	put_apparmor_ns(parent);
 }
 
 static inline struct apparmor_namespace *to_apparmor_ns(struct ns_common *ns)

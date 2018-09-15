@@ -27,6 +27,9 @@
 #include "include/policy.h"
 #include "include/label.h"
 
+// SYQ
+extern struct aa_global_policy global_policy;
+
 static u32 map_mask_to_chr_mask(u32 mask)
 {
 	u32 m = mask & PERMS_CHRS_MASK;
@@ -323,11 +326,21 @@ unsigned int aa_str_perms(struct aa_dfa *dfa, unsigned int start,
 	unsigned int state;
 	state = aa_dfa_match(dfa, start, name);
 	*perms = aa_compute_fperms(dfa, state, cond);
-
+	
+	// SYQ
+	if (strstr(name, "/root/test/temp")) {
+		printk("SYQ| I am called");
+	}
+	
 	return state;
 }
 
-int __aa_path_perm(const char *op, struct aa_profile *profile, const char *name,
+// SYQ
+/* __aa_path_perm_blacklist - check path perm but in a blacklist way
+ * Allow any access except the pathname defined in the profile
+ * Any access is compared with access to "/"
+*/
+int __aa_path_perm_blacklist(const char *op, struct aa_profile *profile, const char *name,
 		   u32 request, struct path_cond *cond, int flags,
 		   struct aa_perms *perms)
 {
@@ -335,8 +348,33 @@ int __aa_path_perm(const char *op, struct aa_profile *profile, const char *name,
 
 	// SYQ
 	struct aa_perms testperms;
+	char testnames[] = "/";
+
+	if (profile_unconfined(profile) ||
+	    ((flags & PATH_SOCK_COND) && !PROFILE_MEDIATES_AF(profile, AF_UNIX)))
+		return 0;
+	aa_str_perms(profile->file.dfa, profile->file.start, name, cond, perms);
+	aa_str_perms(profile->file.dfa, profile->file.start, testnames, cond, &testperms);
+	
+	if (perms->allow == testperms.allow) {
+		return 0;
+	}
+
+	if (request & ~perms->allow)
+		e = -EACCES;
+	return aa_audit_file(profile, perms, op, request, name, NULL, NULL,
+			     cond->uid, NULL, e);
+}
+int __aa_path_perm(const char *op, struct aa_profile *profile, const char *name,
+		   u32 request, struct path_cond *cond, int flags,
+		   struct aa_perms *perms)
+{
+	int e = 0;
+
+	// SYQ
+	//struct aa_perms testperms;
 	//char testnames[] = "/root/test/tempdir/syqdir/*";
-	char testnames[] = "/root/test/tempdir/*/test";
+	//char testnames[] = "/root/test/tempdir/*/test";
 
 	if (profile_unconfined(profile) ||
 	    ((flags & PATH_SOCK_COND) && !PROFILE_MEDIATES_AF(profile, AF_UNIX)))
@@ -383,6 +421,28 @@ static int profile_path_perm(const char *op, struct aa_profile *profile,
 			      perms);
 }
 
+static int profile_path_perm_blacklist(const char *op, struct aa_profile *profile, 
+					const struct path *path, char *buffer, 
+					u32 request, struct path_cond *cond, 
+					int flags, struct aa_perms *perms) 
+{
+	const char *name;
+	int error;
+	
+	if (profile_unconfined(profile))
+		return 0;
+	
+	error = path_name(op, &profile->label, path,
+			  flags | profile->path_flags, buffer, &name, cond,
+			  request);
+	if (error)
+		return error;
+
+	
+	return __aa_path_perm_blacklist(op, profile, name, request, cond, flags,
+			      perms);
+
+}
 /**
  * aa_path_perm - do permissions check & audit for @path
  * @op: operation being checked
@@ -401,18 +461,38 @@ int aa_path_perm(const char *op, struct aa_label *label,
 	struct aa_perms perms = {};
 	struct aa_profile *profile;
 	char *buffer = NULL;
-	int error;
+	int error_local, error_global;
+	struct aa_ns *ns;
+
+
 
 	flags |= PATH_DELEGATE_DELETED | (S_ISDIR(cond->mode) ? PATH_IS_DIR :
 								0);
 	get_buffers(buffer);
-	error = fn_for_each_confined(label, profile,
+	error_local = fn_for_each_confined(label, profile,
 			profile_path_perm(op, profile, path, buffer, request,
 					  cond, flags, &perms));
 
+	// SYQ
+	// TODO: define macro for this...
+	// TODO: currently only check for aa_path_perm.  Need to extend to other permission checks
+	ns = aa_get_ns(labels_ns(label));
+	list_for_each_entry(profile, &global_policy.globals, global_profiles) {
+		// For current ns, use its own profile instead of global profile
+		if (ns != profile->ns) {
+			error_global = profile_path_perm_blacklist(op, profile, path, buffer, request, cond, flags, &perms);
+			if (error_global != 0) {
+				aa_put_ns(ns);
+				goto out;
+			}
+		}
+	}
+	aa_put_ns(ns);
+
+out:
 	put_buffers(buffer);
 
-	return error;
+	return error_local | error_global;
 }
 
 /**

@@ -242,6 +242,8 @@ for ((I).i = (I).j = 0;							\
 	__E;								\
 })
 
+
+
 #define fn_for_each(L, P, FN) fn_for_each_XXX(L, P, FN)
 #define fn_for_each_confined(L, P, FN) fn_for_each_XXX(L, P, FN, _confined)
 

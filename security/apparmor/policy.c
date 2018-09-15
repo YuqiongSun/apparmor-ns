@@ -95,6 +95,7 @@
 
 // SYQ
 #include <linux/apparmor_namespace.h>
+extern struct aa_global_policy global_policy;
 
 int unprivileged_userns_apparmor_policy = 1;
 
@@ -127,6 +128,7 @@ static void __add_profile(struct list_head *list, struct aa_profile *profile)
 	list_add_rcu(&profile->base.list, list);
 	/* get list reference */
 	aa_get_profile(profile);
+	
 	l = aa_label_insert(&profile->ns->labels, &profile->label);
 	AA_BUG(l != &profile->label);
 	aa_put_label(l);
@@ -151,8 +153,15 @@ static void __list_remove_profile(struct aa_profile *profile)
 	AA_BUG(!mutex_is_locked(&profile->ns->lock));
 
 	list_del_rcu(&profile->base.list);
+	// SYQ
+	// Remove from global list
+	if (strstr(profile->base.name, "globalobjects") && on_list_rcu(&profile->global_profiles)) {
+		list_del_rcu(&profile->global_profiles);
+		global_policy.size--;
+	}
 	aa_put_profile(profile);
 }
+
 
 /**
  * __remove_profile - remove old profile, and children
@@ -165,11 +174,12 @@ static void __remove_profile(struct aa_profile *profile)
 	AA_BUG(!profile);
 	AA_BUG(!profile->ns);
 	AA_BUG(!mutex_is_locked(&profile->ns->lock));
-
+		
 	/* release any children lists first */
 	__aa_profile_list_release(&profile->base.profiles);
 	/* released by free_profile */
 	aa_label_remove(&profile->label);
+
 	__aafs_profile_rmdir(profile);
 	__list_remove_profile(profile);
 }
@@ -222,6 +232,10 @@ void aa_free_profile(struct aa_profile *profile)
 
 	/* free children profiles */
 	aa_policy_destroy(&profile->base);
+
+	// SYQ
+	AA_BUG(on_list_rcu(&profile->global_profiles));
+
 	aa_put_profile(rcu_access_pointer(profile->parent));
 
 	aa_put_ns(profile->ns);
@@ -779,6 +793,11 @@ static void __replace_profile(struct aa_profile *old, struct aa_profile *new)
 		/* new is not on a list already */
 		list_replace_rcu(&old->base.list, &new->base.list);
 		aa_get_profile(new);
+		// SYQ
+		if (strstr(old->base.name, "globalobjects") && on_list_rcu(&old->global_profiles)) {
+			list_del_rcu(&old->global_profiles);
+			global_policy.size--;
+		}
 		aa_put_profile(old);
 	} else
 		__list_remove_profile(old);
@@ -1068,6 +1087,17 @@ ssize_t aa_replace_profiles(struct aa_ns *policy_ns, struct aa_label *label,
 				lh = &ns->base.profiles;
 			__add_profile(lh, ent->new);
 		}
+	
+		// SYQ 
+		// Check if the profile is a global profile, if so add to global list
+		// The magic profile name is "globalobjects"
+		if (strstr(ent->new->base.name, "globalobjects")) {
+			//TODO: Check capability for declaring authority
+			INIT_LIST_HEAD(&ent->new->global_profiles);
+			list_add_rcu(&ent->new->global_profiles, &global_policy.globals);
+			global_policy.size++;
+		}
+	
 	skip:
 		aa_load_ent_free(ent);
 	}

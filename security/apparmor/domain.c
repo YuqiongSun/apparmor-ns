@@ -746,7 +746,6 @@ int apparmor_prepare_label(struct cred *cred, struct aa_ns *ns)
 	AA_BUG(!ctx);
 
 	label = aa_get_newest_label(ctx->label);
-	aa_put_label(ctx->label);
 
 	new = aa_label_new_namespace(label, GFP_ATOMIC, ns->unconfined); 
 		
@@ -755,6 +754,7 @@ int apparmor_prepare_label(struct cred *cred, struct aa_ns *ns)
 		goto out;
 	}
 
+	aa_put_label(ctx->label);
 	ctx->label = new;
 out:
 	aa_put_label(label);
