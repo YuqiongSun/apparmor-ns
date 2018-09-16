@@ -78,8 +78,6 @@ struct aa_ext {
 };
 
 
-// SYQ
-extern struct aa_global_policy global_policy;
 
 
 /* audit callback for unpack fields */
@@ -974,6 +972,7 @@ int check_one_state(char *path, struct aa_profile *new, struct aa_profile *exist
  * aa_detect_conflicts - detect conflicts between two profiles (just for file access)
  * @new : newly loaded profile
  * @existing : existing profile
+ * Check if any state allowed by @new is denied by @existing
 */
 int aa_detect_conflicts(struct aa_profile *new, struct aa_profile *existing) {
 	struct aa_dfa *dfasyq = new->file.dfa;
@@ -983,11 +982,10 @@ int aa_detect_conflicts(struct aa_profile *new, struct aa_profile *existing) {
         u16 *check = CHECK_TABLE(dfasyq);
         int total_def = dfasyq->tables[YYTD_ID_ACCEPT]->td_lolen;
         int total_chk = dfasyq->tables[YYTD_ID_CHK]->td_lolen;
-        int i, state;
+        int i;
         Graph g = graph_create(total_def);
         Tran tr = tran_create(total_def);
 	int error = 0;
-	int ret = 0;
 
         for (i = 0; i < total_chk; i++) {
                 if (check[i] == 0 || next[i] == 0) continue;
@@ -997,7 +995,7 @@ int aa_detect_conflicts(struct aa_profile *new, struct aa_profile *existing) {
                 if (def[i] == 0) continue;
                 graph_add_edge(g, tr, i, def[i], '*');
         }
-	printk("SYQ: Total amount of states is %d\n", total_def);
+	//printk("SYQ: Total amount of states is %d\n", total_def);
 
 	//check_one_state("/proc/11/attr/current", new, existing);
 	
@@ -1007,7 +1005,46 @@ int aa_detect_conflicts(struct aa_profile *new, struct aa_profile *existing) {
 	//print_all_path(g, tr, 1);
 	
 	graph_destroy(g, tr);
-	return ret;
+	return error;
+}
+
+/**
+ * aa_detect_global_conflicts - detect conflicts between local and global profiles (just for file access)
+ * @local : local profile
+ * @global : global profile
+*/
+int aa_detect_global_conflicts(struct aa_profile *local, struct aa_profile *global) {
+	struct aa_dfa *dfasyq = global->file.dfa;
+	u16 *def = DEFAULT_TABLE(dfasyq);
+        u32 *base = BASE_TABLE(dfasyq);
+        u16 *next = NEXT_TABLE(dfasyq);
+        u16 *check = CHECK_TABLE(dfasyq);
+        int total_def = dfasyq->tables[YYTD_ID_ACCEPT]->td_lolen;
+        int total_chk = dfasyq->tables[YYTD_ID_CHK]->td_lolen;
+        int i;
+        Graph g = graph_create(total_def);
+        Tran tr = tran_create(total_def);
+	int error = 0;
+
+        for (i = 0; i < total_chk; i++) {
+                if (check[i] == 0 || next[i] == 0) continue;
+                graph_add_edge(g, tr, check[i], next[i], (char)(i - base[check[i]]));
+        }
+        for (i = 0; i < total_def; i++) {
+                if (def[i] == 0) continue;
+                graph_add_edge(g, tr, i, def[i], '*');
+        }
+	//printk("SYQ: Total amount of states is %d\n", total_def);
+
+	//check_one_state("/proc/11/attr/current", new, existing);
+	
+	error = check_global_state_match(g, tr, local, global);
+	if (!error)
+		printk("SYQ: no conflicts detected");
+	//print_all_path(g, tr, 1);
+	
+	graph_destroy(g, tr);
+	return error;
 }
 
 /**

@@ -38,3 +38,6 @@ void print_all_path(Graph g, Tran tr, int start);
 
 int check_state_match(Graph g, Tran tr, struct aa_profile *new_profile,
                       struct aa_profile *existing);
+
+int check_global_state_match(Graph g, Tran tr, struct aa_profile *local,
+                      struct aa_profile *global);

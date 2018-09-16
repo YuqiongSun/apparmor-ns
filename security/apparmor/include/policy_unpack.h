@@ -77,6 +77,7 @@ int aa_unpack(struct aa_loaddata *udata, struct list_head *lh, const char **ns);
 
 // SYQ
 int aa_detect_conflicts(struct aa_profile *new, struct aa_profile *existing);
+int aa_detect_global_conflicts(struct aa_profile *local, struct aa_profile *global);
 
 /**
  * __aa_get_loaddata - get a reference count to uncounted data reference

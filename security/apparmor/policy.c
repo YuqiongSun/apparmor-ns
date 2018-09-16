@@ -948,7 +948,7 @@ ssize_t aa_replace_profiles(struct aa_ns *policy_ns, struct aa_label *label,
 	/* SYQ: check for profile conflicts before replacing or loading */
 	list_for_each_entry(ent, &lh, list) {
 		struct aa_ns *cur = ns;
-		struct aa_profile *existing, *temp;
+		struct aa_profile *existing, *temp, *profile;
 		int conflicts = 0;
 		int i = 0;
 		while (cur != init_apparmor_ns.root_ns) {
@@ -957,28 +957,50 @@ ssize_t aa_replace_profiles(struct aa_ns *policy_ns, struct aa_label *label,
 			if (!existing) {
 				// Assume ancestor does not have specific transition rules
 				// Check against profiles inherited from ancestor
+				// This is also for parent-child conflicts
 				for (i = 0; i < label->size; i++) {
 					temp = label->vec[i];
 					aa_get_profile(temp);
 					if (temp->ns == cur && temp->mode != APPARMOR_UNCONFINED) {
 						conflicts = aa_detect_conflicts(ent->new, temp);
 						if (conflicts) {
-							printk("SYQ: checking conflicts with ns:%s, profile:%s\n", &cur->base.name, temp->base.hname);
-							printk("SYQ: conflicts detected for %s\n", ent->new->base.hname);
+							printk("SYQ: checking conflicts with ns:%s, profile:%s\n", cur->base.hname, temp->base.hname);
+							printk("SYQ: Parent-child conflicts detected for %s\n", ent->new->base.hname);
 						}
 					}
 					aa_put_profile(temp);
 				}
 				continue;
 			}
-			printk("SYQ: checking conflicts with ns:%s, profile:%s\n", &cur->base.name, existing->base.hname);
+			/* SYQ: checking for parent-child conflicts */
+			/* Conflicts between new profile and all profiles with the same name in ancestors */
 			conflicts = aa_detect_conflicts(ent->new, existing);
 			if (conflicts) {
-				printk("SYQ: conflicts detected for %s\n", ent->new->base.hname);
+				printk("SYQ: checking conflicts with ns:%s, profile:%s\n", cur->base.hname, existing->base.hname);
+				printk("SYQ: Parent-child conflicts detected for %s\n", ent->new->base.hname);
 			}
 			aa_put_profile(existing);
 		}
+
+		/* SYQ: checking for global local conflicts*/
+		/* Conflicts between new profile and existing global object profiles */
+		list_for_each_entry(profile, &global_policy.globals, global_profiles) {
+			if (profile->ns == ns) continue;
+			conflicts = aa_detect_global_conflicts(ent->new, profile);
+			if (conflicts) {
+				printk("SYQ: checking conflicts with ns: %s global profile:%s\n", profile->ns->base.hname, profile->base.hname);
+				printk("SYQ: Global-local conflicts detected for %s\n", ent->new->base.hname);
+			}
+		}
+
+		/* SYQ: checking for expectation conflicts */
+		/* Conflicts between new global object profile and ALL existing profiles*/
+		if (strstr(ent->new->base.name, "globalobjects")) {
+			//TODO: check with ALL existing profiles
+			// There might be a better way to do it?
+		}
 	}
+
 
 	/* setup parent and ns info */
 	list_for_each_entry(ent, &lh, list) {

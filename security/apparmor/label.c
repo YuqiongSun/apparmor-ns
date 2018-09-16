@@ -1950,8 +1950,7 @@ struct aa_label *aa_label_new_namespace(struct aa_label *base, gfp_t gfp, struct
 		vec[i] = base->vec[i];
 
 	// profile for the new namespace is always unconfined
-	// TODO: can I directly set this? or is there some ref counter to update 
-	vec[len - 1] = aa_get_profile(new_profile);
+	vec[len - 1] = new_profile;
 
 	label = aa_vec_find_or_create_label(vec, len, gfp);
 

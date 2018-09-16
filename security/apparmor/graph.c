@@ -390,3 +390,76 @@ int check_state_match(Graph g, Tran tr, struct aa_profile *new_profile,
 	}
 	return ret;
 }
+
+
+int check_global_state_match(Graph g, Tran tr, struct aa_profile *local, 
+		      struct aa_profile *global) {
+	Node start = kmalloc(sizeof(struct node), GFP_KERNEL);
+	int last = -1;
+	int i;
+	int ret = 0;
+	char *path;
+	int err;	
+	struct aa_perms perms_e = {};
+	struct aa_perms perms_n = {};
+	struct aa_perms perms_g_e = {};
+	struct aa_perms perms_g_n = {};
+	struct aa_perms testperms_e = {};
+	struct aa_perms testperms_n = {};
+	char testnames[] = "/";
+	int local_state; 
+	int test_state;	
+	
+
+	start->len = 1;
+	start->path = kmalloc(sizeof(int) * start->len, GFP_KERNEL);
+	start->path[start->len - 1] = global->file.start;
+	start->next = NULL;
+	head = start;
+	tail = start;
+
+	test_state = aa_dfa_match(global->file.dfa, global->file.start, testnames);
+	testperms_e = aa_compute_fperms_simple(global->file.dfa, test_state, 1);
+	testperms_n = aa_compute_fperms_simple(global->file.dfa, test_state, 1);
+
+	while (head != NULL) {
+		Node cur = head;
+		err = generate_path(cur, g, tr, &path);
+		if (err != 0) {
+			printk("SYQ| error allocating memory");
+			return -1;
+		}
+		//printk("SYQ| Checking Path: %s\n", path);
+		local_state = aa_dfa_match(local->file.dfa, local->file.start, path);
+		perms_e = aa_compute_fperms_simple(local->file.dfa, local_state, 1);
+		perms_n = aa_compute_fperms_simple(local->file.dfa, local_state, 0);	
+		perms_g_e = aa_compute_fperms_simple(global->file.dfa, cur->path[cur->len - 1], 1);
+		perms_g_n = aa_compute_fperms_simple(global->file.dfa, cur->path[cur->len - 1], 0);
+		if (testperms_e.allow != perms_g_e.allow || testperms_n.allow != perms_g_n.allow) {
+			if ((perms_e.allow & perms_g_e.allow) != perms_e.allow || (perms_n.allow & perms_g_n.allow) != perms_n.allow) {
+				ret = 1;
+				printk("SYQ| conflicts detected at %s\n", path);
+			}
+		}
+
+		last = cur->path[cur->len - 1];
+		for (i = 0; i < g->alist[last]->d; i++) {
+			if (isNotVisited(g->alist[last]->list[i], cur)) {
+				Node new = kmalloc(sizeof(struct node), GFP_KERNEL);
+				new->len = cur->len + 1;
+				new->path = kmalloc(sizeof(int) * new->len, GFP_KERNEL);
+				memcpy(new->path, cur->path, sizeof(int) * cur->len);
+				new->path[cur->len] = g->alist[last]->list[i];
+				new->next = NULL;
+				tail->next = new;
+				tail = new;	
+			}
+		}		
+
+		head = head->next;
+		kfree(cur->path);
+		kfree(path);
+		kfree(cur);
+	}
+	return ret;
+}
