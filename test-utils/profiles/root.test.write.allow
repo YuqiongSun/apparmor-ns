@@ -1,0 +1,10 @@
+# Last Modified: Wed May  9 11:40:26 2018
+#include <tunables/global>
+
+/root/test/write {
+  #include <abstractions/base>
+  #include <abstractions/bash>
+
+  /root/test/temp rw,
+
+}
